@@ -28,6 +28,6 @@ extractor.to_json()
 
 And that's it ! You now have your data in a json file just for you.
 
-## Data models
+### Data models
 
 For a more user friendly manipulation of the data, extraction of the data results in a pydantic data model. This model is described in `coros_data_extractor.model` module, but essentially you will find a list of activities with the description of the activity, the laps and the associated time series.
