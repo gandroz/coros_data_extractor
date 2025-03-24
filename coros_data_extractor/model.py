@@ -1,12 +1,16 @@
-from pydantic import BaseModel, ConfigDict, field_serializer, field_validator, RootModel
+"""Data models for the Coros data extractor."""
+
 from datetime import datetime, timedelta, timezone
 from typing import Any, List
+
 import pytz
+from pydantic import BaseModel, ConfigDict, RootModel, field_serializer, field_validator
 
 
 class Summary(BaseModel):
-    """Model with summary ata of an activity"""
-    model_config = ConfigDict(extra='ignore')
+    """Model with summary ata of an activity."""
+
+    model_config = ConfigDict(extra="ignore")
 
     adjustedPace: int
     aerobicEffect: float
@@ -39,17 +43,22 @@ class Summary(BaseModel):
 
     @field_validator("startTimestamp", "endTimestamp", mode="before")
     @classmethod
-    def convert_timestamp_to_datetime(cls, value: Any) -> Any:  
-        return (datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=value / 100)).astimezone(pytz.timezone("America/New_York"))
-    
+    def convert_timestamp_to_datetime(cls, value: Any) -> Any:
+        """Convert timestamp to datetime."""
+        return (datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=value / 100)).astimezone(
+            pytz.timezone("America/New_York")
+        )
+
     @field_serializer("startTimestamp", "endTimestamp")
     def serialize_dt(self, dt: datetime, _info):
+        """Serialize datetime to iso format."""
         return dt.isoformat()
 
 
 class Frequencies(BaseModel):
-    """Time series model of the collected data during an activity"""
-    model_config = ConfigDict(extra='ignore')
+    """Time series model of the collected data during an activity."""
+
+    model_config = ConfigDict(extra="ignore")
 
     cadence: List[int] = []
     distance: List[int] = []
@@ -59,8 +68,9 @@ class Frequencies(BaseModel):
 
 
 class Lap(BaseModel):
-    """Lap data model"""
-    model_config = ConfigDict(extra='ignore')
+    """Lap data model."""
+
+    model_config = ConfigDict(extra="ignore")
 
     avgCadence: int
     avgHr: int
@@ -80,32 +90,41 @@ class Lap(BaseModel):
 
     @field_validator("startTimestamp", "endTimestamp", mode="before")
     @classmethod
-    def convert_timestamp_to_datetime(cls, value: Any) -> Any:  
-        return (datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=value / 100)).astimezone(pytz.timezone("America/New_York"))
-    
+    def convert_timestamp_to_datetime(cls, value: Any) -> Any:
+        """Convert timestamp to datetime."""
+        return (datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=value / 100)).astimezone(
+            pytz.timezone("America/New_York")
+        )
+
     @field_serializer("startTimestamp", "endTimestamp")
     def serialize_dt(self, dt: datetime, _info):
+        """Serialize datetime to iso format."""
         return dt.isoformat()
 
 
 class TrainActivity(BaseModel):
-    """Activity model"""
-    model_config = ConfigDict(extra='ignore')
-    
+    """Activity model."""
+
+    model_config = ConfigDict(extra="ignore")
+
     summary: Summary
     data: Frequencies
     laps: list[Lap]
 
 
 class TrainActivities(RootModel):
-    """List of activities model"""
+    """List of activities model."""
+
     root: list[TrainActivity] = []
 
     def __iter__(self):
+        """Iterate over activities."""
         return iter(self.root)
 
     def __getitem__(self, item):
+        """Get activity by index."""
         return self.root[item]
-    
+
     def add_activity(self, activity: TrainActivity):
+        """Add an activity to the list."""
         self.root.append(activity)
