@@ -1,16 +1,13 @@
 """Data models for the Coros data extractor."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-import pytz
 from pydantic import BaseModel, ConfigDict, RootModel, field_serializer, field_validator
 
 
 class Summary(BaseModel):
-    """Model with summary ata of an activity."""
-
-    model_config = ConfigDict(extra="ignore")
+    """Model representing the summary for an activity."""
 
     adjustedPace: int
     aerobicEffect: float
@@ -43,22 +40,20 @@ class Summary(BaseModel):
 
     @field_validator("startTimestamp", "endTimestamp", mode="before")
     @classmethod
-    def convert_timestamp_to_datetime(cls, value: Any) -> Any:
+    def convert_timestamp_to_datetime(cls, value: Any) -> datetime:
         """Convert timestamp to datetime."""
-        return (datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=value / 100)).astimezone(
-            pytz.timezone("America/New_York")
-        )
+        return (
+            datetime.fromtimestamp(0, timezone.utc) + timedelta(seconds=value / 100)
+        ).astimezone()
 
     @field_serializer("startTimestamp", "endTimestamp")
-    def serialize_dt(self, dt: datetime, _info):
-        """Serialize datetime to iso format."""
+    def serialize_dt(self, dt: datetime, _info) -> date:
+        """Serialize datetime to ISO-8601 format."""
         return dt.isoformat()
 
 
 class Frequencies(BaseModel):
     """Time series model of the collected data during an activity."""
-
-    model_config = ConfigDict(extra="ignore")
 
     cadence: list[int] = []
     distance: list[int] = []
@@ -69,8 +64,6 @@ class Frequencies(BaseModel):
 
 class Lap(BaseModel):
     """Lap data model."""
-
-    model_config = ConfigDict(extra="ignore")
 
     avgCadence: int
     avgHr: int
@@ -90,22 +83,20 @@ class Lap(BaseModel):
 
     @field_validator("startTimestamp", "endTimestamp", mode="before")
     @classmethod
-    def convert_timestamp_to_datetime(cls, value: Any) -> Any:
+    def convert_timestamp_to_datetime(cls, value: Any) -> datetime:
         """Convert timestamp to datetime."""
-        return (datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=value / 100)).astimezone(
-            pytz.timezone("America/New_York")
-        )
+        return (
+            datetime.fromtimestamp(0, timezone.utc) + timedelta(seconds=value / 100)
+        ).astimezone()
 
     @field_serializer("startTimestamp", "endTimestamp")
-    def serialize_dt(self, dt: datetime, _info):
-        """Serialize datetime to iso format."""
+    def serialize_dt(self, dt: datetime, _info) -> date:
+        """Serialize datetime to ISO-8601 format."""
         return dt.isoformat()
 
 
 class TrainActivity(BaseModel):
     """Activity model."""
-
-    model_config = ConfigDict(extra="ignore")
 
     summary: Summary
     data: Frequencies
