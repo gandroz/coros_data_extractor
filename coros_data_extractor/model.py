@@ -1,7 +1,7 @@
 """Data models for the Coros data extractor."""
 
 from datetime import datetime, timedelta, timezone
-from typing import Any, List
+from typing import Any
 
 import pytz
 from pydantic import BaseModel, ConfigDict, RootModel, field_serializer, field_validator
@@ -60,11 +60,11 @@ class Frequencies(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    cadence: List[int] = []
-    distance: List[int] = []
-    heart: List[int] = []
-    heartLevel: List[int] = []
-    timestamp: List[int] = []
+    cadence: list[int] = []
+    distance: list[int] = []
+    heart: list[int] = []
+    heartLevel: list[int] = []
+    timestamp: list[int] = []
 
 
 class Lap(BaseModel):
