@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from enum import Enum
 from pathlib import Path
 
 import requests
@@ -18,6 +19,11 @@ from .model import (
     TrainActivities,
     TrainActivity,
 )
+
+
+class LapType(Enum):
+    BIKE_RIDE = 1
+    RUNNING = 2
 
 
 class CorosDataExtractor:
@@ -85,7 +91,7 @@ class CorosDataExtractor:
         """Convert raw activity to laps data."""
         laps = []
         for item in data:
-            if item["type"] == 2:
+            if item["type"] == LapType.RUNNING:
                 for lap in item["lapItemList"]:
                     laps.append(Lap(**lap))
         return laps
