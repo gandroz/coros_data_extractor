@@ -49,12 +49,12 @@ class CorosDataExtractor:
         self.activities = None
         self.access_token = None
 
-    def login(self, email: str, pwd: str) -> None:
+    def login(self, account: str, password: str) -> None:
         """Login to Coros API."""
         request_data = {
-            "account": email,
+            "account": account,
             "accountType": 2,
-            "pwd": hashlib.md5(pwd.encode()).hexdigest(),
+            "pwd": hashlib.md5(password.encode()).hexdigest(),
         }
         resp = requests.post(LOGIN_URL, json=request_data)
         self.access_token = resp.json()["data"]["accessToken"]
@@ -144,6 +144,7 @@ class CorosDataExtractor:
         for item in data:
             if item["type"] == LapType.RUNNING:
                 for lap in item["lapItemList"]:
+                    print(lap)
                     laps.append(Lap(**lap))
         return laps
 
