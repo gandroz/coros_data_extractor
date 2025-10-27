@@ -10,17 +10,8 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.12"
-ipykernel = "^6.29.5"
-garmin-fit-sdk = "^21.158"
-pandas = "^2.2"
-matplotlib = "^3.10.1"
-numpy = "^2.2.3"
-scikit-learn = "^1.6.1"
-seaborn = "^0.13.2"
 requests = "^2.32.3"
-pydantic = "^2.10.6"
-mplcursors = "^0.6"
-python-dotenv = "^1.0.1"
+pydantic = "^2.12.0"
 
 [tool.poetry.group.dev.dependencies]
 pre-commit = "^4.2.0"
