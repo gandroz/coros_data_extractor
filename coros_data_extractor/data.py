@@ -6,18 +6,18 @@ from pathlib import Path
 
 import requests
 
-from coros_data_extractor.model import (
+from .config import (
+    ACTIVITIES_URL,
+    ACTIVITY_DETAILS_URL,
+    LOGIN_URL,
+)
+from .model import (
     Frequencies,
     Lap,
     Summary,
     TrainActivities,
     TrainActivity,
 )
-
-base_url = "https://teamapi.coros.com/"
-login_url = base_url + "account/login"
-activities_url = base_url + "activity/query"
-activity_details_url = base_url + "activity/detail/query"
 
 
 class CorosDataExtractor:
@@ -35,11 +35,12 @@ class CorosDataExtractor:
             "accountType": 2,
             "pwd": hashlib.md5(pwd.encode()).hexdigest(),
         }
-        resp = requests.post(login_url, json=request_data)
+        resp = requests.post(LOGIN_URL, json=request_data)
         self.access_token = resp.json()["data"]["accessToken"]
 
     def get_activities(self) -> dict:
         """Extract list of activities from API."""
+
         payload = {
             "size": 200,
             "pageNumber": 1,
@@ -59,7 +60,7 @@ class CorosDataExtractor:
             "screenH": 1440,
         }
         headers = {"Accesstoken": self.access_token}
-        resp = requests.post(activity_details_url, headers=headers, params=payload)
+        resp = requests.post(ACTIVITY_DETAILS_URL, headers=headers, params=payload)
         return resp.json()
 
     @staticmethod
