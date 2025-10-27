@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import math
 from enum import Enum
 from pathlib import Path
 
@@ -10,6 +11,8 @@ import requests
 from .config import (
     ACTIVITIES_URL,
     ACTIVITY_DETAILS_URL,
+    ACTIVITY_PAGINATION_LIMIT,
+    DEFAULT_ACTIVITY_LIMIT,
     LOGIN_URL,
 )
 from .model import (
@@ -58,24 +61,52 @@ class CorosDataExtractor:
 
     def get_activities(
         self,
+        limit: int | None = DEFAULT_ACTIVITY_LIMIT,
         activity_types: list[int] | None = None,
     ) -> dict:
         """Extract list of activities from API."""
-
         if activity_types is None:
             mode_list = ""
         else:
             mode_list = ",".join(str(activity_type) for activity_type in activity_types)
 
         payload = {
-            "size": 200,
             "modeList": mode_list,
             "pageNumber": 1,
         }
         headers = {"Accesstoken": self.access_token}
-        resp = requests.get(activities_url, headers=headers, params=payload)
-        res = resp.json()
-        return res["data"]["dataList"]
+
+        if limit is None:
+            # Need to figure out how many total activities there are.
+            #
+            # Query for a single activity to get the total count back for a
+            # given activity type. This allows you to pull the data in chunks.
+            payload["size"] = 1
+            resp = requests.get(ACTIVITIES_URL, headers=headers, params=payload)
+            resp.raise_for_status()
+            res = resp.json()
+
+            limit = ACTIVITY_PAGINATION_LIMIT
+            total_activities = res["data"]["count"]
+        else:
+            # This is technically incorrect, but whatever... it doesn't really cause
+            # any grief AFAICT.
+            total_activities = limit
+
+        payload["size"] = min(limit, ACTIVITY_PAGINATION_LIMIT)
+
+        datalist = []
+        num_pages = math.ceil(total_activities / limit)
+        for page_number in range(1, num_pages + 1):
+            payload["pageNumber"] = page_number
+
+            resp = requests.get(ACTIVITIES_URL, headers=headers, params=payload)
+            resp.raise_for_status()
+            res = resp.json()
+
+            datalist.extend(res["data"]["dataList"])
+
+        return datalist
 
     def get_activity_raw_data(self, activity) -> dict:
         """Extract raw data of one activity."""
