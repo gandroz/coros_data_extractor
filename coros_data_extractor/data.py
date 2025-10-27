@@ -1,8 +1,12 @@
 """Coros data extractor from Training Hub."""
 
+from __future__ import annotations
+
 import hashlib
 import json
+import logging
 import math
+import time
 from enum import Enum
 from pathlib import Path
 
@@ -22,6 +26,17 @@ from .model import (
     TrainActivities,
     TrainActivity,
 )
+
+# ruff: noqa: S324
+
+
+API_TIMEOUT = 10
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(name)s: %(levelname)s: %(asctime)s %(message)s",
+)
+LOGGER = logging.getLogger(__name__)
 
 
 class ActivityType(Enum):
@@ -56,7 +71,8 @@ class CorosDataExtractor:
             "accountType": 2,
             "pwd": hashlib.md5(password.encode()).hexdigest(),
         }
-        resp = requests.post(LOGIN_URL, json=request_data)
+        resp = requests.post(LOGIN_URL, json=request_data, timeout=API_TIMEOUT)
+        resp.raise_for_status()
         self.access_token = resp.json()["data"]["accessToken"]
 
     def get_activities(
@@ -65,6 +81,18 @@ class CorosDataExtractor:
         activity_types: list[int] | None = None,
     ) -> dict:
         """Extract list of activities from API."""
+        with requests.Session() as session:
+            return self._get_activities_inner(
+                session, limit=limit, activity_types=activity_types,
+            )
+
+    def _get_activities_inner(
+        self,
+        session: requests.Session,
+        limit: ...,
+        activity_types: ...,
+    ) -> dict:
+        """Extract list of activities from API (inner)."""
         if activity_types is None:
             mode_list = ""
         else:
@@ -82,7 +110,9 @@ class CorosDataExtractor:
             # Query for a single activity to get the total count back for a
             # given activity type. This allows you to pull the data in chunks.
             payload["size"] = 1
-            resp = requests.get(ACTIVITIES_URL, headers=headers, params=payload)
+            resp = session.get(
+                ACTIVITIES_URL, headers=headers, params=payload, timeout=API_TIMEOUT,
+            )
             resp.raise_for_status()
             res = resp.json()
 
@@ -100,7 +130,12 @@ class CorosDataExtractor:
         for page_number in range(1, num_pages + 1):
             payload["pageNumber"] = page_number
 
-            resp = requests.get(ACTIVITIES_URL, headers=headers, params=payload)
+            resp = session.get(
+                ACTIVITIES_URL,
+                headers=headers,
+                params=payload,
+                timeout=API_TIMEOUT,
+            )
             resp.raise_for_status()
             res = resp.json()
 
@@ -108,8 +143,50 @@ class CorosDataExtractor:
 
         return datalist
 
-    def get_activity_raw_data(self, activity) -> dict:
+    @staticmethod
+    def valid_raw_activity_data(resp_json: dict) -> bool:
+        return resp_json.get("data", {}).get("summary") is not None
+
+    def get_raw_activity_data(
+        self,
+        session: requests.Session,
+        activity: dict,
+    ) -> dict:
         """Extract raw data of one activity."""
+        MAX_TRIES = 3
+        WAIT_BETWEEN_RETRIES = 0.5
+
+        for retries_left in range(MAX_TRIES - 1, -1, -1):
+            try:
+                resp_json = self._get_raw_activity_data_inner(
+                    session, activity,
+                )
+            except Exception:
+                LOGGER.exception("An exception occurred when downloading the raw JSON")
+            else:
+                if self.valid_raw_activity_data(resp_json):
+                    return resp_json
+
+                LOGGER.error(
+                    "JSON malformed or contained unexpected elements: %r",
+                    resp_json,
+                )
+
+            if retries_left:
+                LOGGER.warning("Will retry %d more times", retries_left)
+                time.sleep(WAIT_BETWEEN_RETRIES)
+
+        err_msg = (
+            f"REST API call to {ACTIVITY_DETAILS_URL=} failed after {MAX_TRIES} "
+            "attempts."
+        )
+        raise RuntimeError(err_msg)
+
+    def _get_raw_activity_data_inner(
+        self,
+        session: requests.Session,
+        activity: ...,
+    ) -> dict:
         payload = {
             "labelId": activity["labelId"],
             "sportType": activity["sportType"],
@@ -117,7 +194,10 @@ class CorosDataExtractor:
             "screenH": 1440,
         }
         headers = {"Accesstoken": self.access_token}
-        resp = requests.post(ACTIVITY_DETAILS_URL, headers=headers, params=payload)
+        resp = session.post(
+            ACTIVITY_DETAILS_URL, headers=headers, params=payload, timeout=API_TIMEOUT,
+        )
+        resp.raise_for_status()
         return resp.json()
 
     @staticmethod
@@ -125,16 +205,16 @@ class CorosDataExtractor:
         """Convert raw activity data to time series."""
         freq = Frequencies()
         for item in data:
-            freq.cadence.append(item["cadence"] if "cadence" in item else 0)
-            freq.distance.append(item["distance"] if "distance" in item else 0)
-            freq.heart.append(item["heart"] if "heart" in item else 0)
-            freq.heartLevel.append(item["heartLevel"] if "heartLevel" in item else 0)
-            freq.timestamp.append(item["timestamp"] if "timestamp" in item else 0)
+            freq.cadence.append(item.get("cadence", 0))
+            freq.distance.append(item.get("distance", 0))
+            freq.heart.append(item.get("heart", 0))
+            freq.heartLevel.append(item.get("heartLevel", 0))
+            freq.timestamp.append(item.get("timestamp", 0))
         return freq
 
     @staticmethod
     def get_summary_data(data) -> Summary:
-        """Concert raw activity summary data to summary model."""
+        """Convert raw activity summary data to summary model."""
         return Summary(**data)
 
     @staticmethod
@@ -143,29 +223,46 @@ class CorosDataExtractor:
         laps = []
         for item in data:
             if item["type"] == LapType.RUNNING:
-                for lap in item["lapItemList"]:
-                    print(lap)
-                    laps.append(Lap(**lap))
+                laps.extend(Lap(**lap) for lap in item["lapItemList"])
         return laps
 
     def extract_data(self) -> None:
         """Extract data from Coros API and build data models accordingly."""
+        with requests.Session() as session:
+            self._extract_data_inner(session)
+
+    def _extract_data_inner(self, session: requests.Session) -> None:
         # get all activites
         activities = self.get_activities()
         self.activities = TrainActivities()
-
-        for _activity in activities:
+        for activity in activities:
             # extract raw data of an activity
-            activity_data = self.get_activity_raw_data(_activity)
-            # build pydantic models
-            activity = TrainActivity(
-                summary=CorosDataExtractor.get_summary_data(activity_data["data"]["summary"]),
-                data=CorosDataExtractor.get_activity_data(activity_data["data"]["frequencyList"]),
-                laps=CorosDataExtractor.get_laps_data(activity_data["data"]["lapList"]),
-            )
-            self.activities.add_activity(activity)
+            try:
+                activity_data = self.get_raw_activity_data(session=session, activity=activity)
+            except (requests.RequestException, RuntimeError):
+                LOGGER.exception(
+                    "Encountered error when processing activity, %r; continuing...",
+                    activity,
+                )
+                continue
 
-    def to_json(self, filename: str = "activities.json"):
+            # build pydantic models
+            try:
+                data_wrapped = activity_data["data"]
+                activity = TrainActivity(
+                    summary=CorosDataExtractor.get_summary_data(data_wrapped["summary"]),
+                    data=CorosDataExtractor.get_activity_data(data_wrapped["frequencyList"]),
+                    laps=CorosDataExtractor.get_laps_data(data_wrapped["lapList"]),
+                )
+            except KeyError:
+                LOGGER.exception(
+                    "Encountered error when processing activity, %r; continuing...",
+                    data_wrapped,
+                )
+            else:
+                self.activities.add_activity(activity)
+
+    def to_json(self, filename: str = "activities.json") -> None:
         """Export data to json file."""
         if self.activities is not None:
             with Path(filename).open("w") as f:
