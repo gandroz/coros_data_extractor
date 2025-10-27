@@ -21,6 +21,18 @@ from .model import (
 )
 
 
+class ActivityType(Enum):
+    INDOOR_RUN = 101
+    HIKE = 104
+    INDOOR_BIKE = 201
+    SKI_TOURING = 503
+    INDOOR_CLIMB = 800
+    BOULDERING = 801
+    WALK = 900
+    JUMP_ROPE = 901
+    MULTISPORT = 10001
+
+
 class LapType(Enum):
     BIKE_RIDE = 1
     RUNNING = 2
@@ -44,13 +56,21 @@ class CorosDataExtractor:
         resp = requests.post(LOGIN_URL, json=request_data)
         self.access_token = resp.json()["data"]["accessToken"]
 
-    def get_activities(self) -> dict:
+    def get_activities(
+        self,
+        activity_types: list[int] | None = None,
+    ) -> dict:
         """Extract list of activities from API."""
+
+        if activity_types is None:
+            mode_list = ""
+        else:
+            mode_list = ",".join(str(activity_type) for activity_type in activity_types)
 
         payload = {
             "size": 200,
+            "modeList": mode_list,
             "pageNumber": 1,
-            "modeList": "",
         }
         headers = {"Accesstoken": self.access_token}
         resp = requests.get(activities_url, headers=headers, params=payload)
