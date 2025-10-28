@@ -15,6 +15,7 @@ import requests
 from .config import (
     ACTIVITIES_URL,
     ACTIVITY_DETAILS_URL,
+    ACTIVITY_DOWNLOAD_URL,
     ACTIVITY_PAGINATION_LIMIT,
     DEFAULT_ACTIVITY_LIMIT,
     LOGIN_URL,
@@ -39,6 +40,14 @@ logging.basicConfig(
 LOGGER = logging.getLogger(__name__)
 
 
+class ActivityFileType(Enum):
+    CSV = 0
+    GPX = 1
+    KML = 2
+    TCX = 3
+    FIT = 4
+
+
 class ActivityType(Enum):
     INDOOR_RUN = 101
     HIKE = 104
@@ -61,8 +70,9 @@ class CorosDataExtractor:
 
     def __init__(self) -> None:
         """Initialize extractor."""
-        self.activities = None
         self.access_token = None
+        self.activities = None
+        self.user_id = None
 
     def login(self, account: str, password: str) -> None:
         """Login to Coros API."""
@@ -73,7 +83,100 @@ class CorosDataExtractor:
         }
         resp = requests.post(LOGIN_URL, json=request_data, timeout=API_TIMEOUT)
         resp.raise_for_status()
-        self.access_token = resp.json()["data"]["accessToken"]
+        data_wrapped = resp.json()["data"]
+        self.access_token = data_wrapped["accessToken"]
+        self.user_id = data_wrapped["userId"]
+
+    def export_activities(
+        self,
+        file_type: ActivityFileType,
+    ) -> None:
+        with requests.Session() as download_session, requests.Session() as query_session:
+            self._export_activities_inner(download_session, query_session, file_type)
+
+    def _export_activities_inner(
+        self,
+        download_session: requests.Session,
+        query_session: requests.Session,
+        file_type: ...,
+    ) -> None:
+
+        match file_type:
+            case ActivityFileType.CSV:
+                extension = "csv"
+            case ActivityFileType.FIT:
+                extension = "fit"
+            case ActivityFileType.GPX:
+                extension = "gpx"
+            case ActivityFileType.KML:
+                extension = "kml"
+            case ActivityFileType.TCX:
+                extension = "tcx"
+
+        activities = self.get_activities()
+        headers = {"Accesstoken": self.access_token}
+
+        for activity in activities:
+            # extract raw data of an activity
+            label_id = activity["labelId"]
+            try:
+                activity_data = self.get_raw_activity_data(
+                    session=query_session, activity=activity,
+                )
+            except (requests.RequestException, RuntimeError):
+                LOGGER.exception(
+                    "Encountered error when processing activity, %r; continuing...",
+                    activity,
+                )
+                continue
+            else:
+                activity_summary = self.get_summary_data(
+                    activity_data["data"]["summary"]
+                )
+
+            sport_type = activity["sportType"]
+            payload = {
+                "labelId": label_id,
+                "fileType": file_type.value,
+                "sportType": sport_type,
+            }
+
+            resp = query_session.post(
+                ACTIVITY_DOWNLOAD_URL, headers=headers, data=payload,
+            )
+            resp.raise_for_status()
+            resp_json = resp.json()
+            if "data" not in resp_json:
+                # NB: not all file formats are guaranteed to be available to download.
+                #
+                # I wish Coros returned something sensible, but they probably did this
+                # to avoid the pain of dealing with direct error handling in their
+                # JS/TS.
+                #
+                # XXX: dig through the dev docs to try and glean which ones are
+                # supported with which types.
+                LOGGER.info(
+                    "Could not download %s file type; is it supported with sport "
+                    "type=%s? Response from server: %s",
+                    file_type.name, sport_type, resp_json,
+                )
+                continue
+
+            download_url = resp_json["data"]["fileUrl"]
+            resp = download_session.get(download_url, stream=True)
+            filename = "_".join([
+                activity_summary.startTimestamp.isoformat(),
+                activity_summary.name,
+                label_id,
+            ]) + f".{extension}"
+
+            LOGGER.debug(
+                "Downloading file with %d from %s to %s",
+                label_id, download_url, filename,
+            )
+
+            with (Path("exports") / filename).open("wb") as fp:
+                fp.write(resp.raw.read())
 
     def get_activities(
         self,
