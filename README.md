@@ -11,7 +11,7 @@ This simple tool helps you extract some of your data. For example, I've used thi
 You first need to setup two environment variables
 
 ```bash
-EMAIL="...@.."
+ACCOUNT="...@.."
 PASSWORD="....."
 ```
 
@@ -21,7 +21,7 @@ Then the tool is very easy to use with those simple commands:
 from coros_data_extractor.data import CorosDataExtractor
 
 extractor = CorosDataExtractor()
-extractor.login(os.environ.get("EMAIL"), os.environ.get("PASSWORD"))
+extractor.login(os.environ.get("ACCOUNT"), os.environ.get("PASSWORD"))
 extractor.extract_data()
 extractor.to_json()
 ```
