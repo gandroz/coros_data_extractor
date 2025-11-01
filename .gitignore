@@ -175,3 +175,4 @@ cython_debug/
 
 # notebook folder (used for further analysis on personal data)
 /notebooks
+.github

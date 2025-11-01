@@ -1,47 +1,68 @@
 [tool.nbqa.config]
 black = "pyproject.toml"
 
-[tool.poetry]
+[project]
 name = "coros_data_extractor"
 version = "0.1.0"
 description = ""
-authors = ["guillaume <guillaume.androz@gmail.com>"]
 readme = "README.md"
+requires-python = ">=3.12,<4"
+authors = [ { name = "guillaume", email = "guillaume.androz@gmail.com" } ]
+dependencies= [
+    "pydantic>=2.12.3",
+    "requests>=2.32.5",
+]
 
-[tool.poetry.dependencies]
-python = "^3.12"
-requests = "^2.32.3"
-pydantic = "^2.12.0"
+[dependency-groups]
+dev = [
+    "ipykernel>=7.1.0",
+    "pre-commit>=4.3.0",
+    "ruff>=0.14.3",
+]
 
-[tool.poetry.group.dev.dependencies]
-pre-commit = "^4.2.0"
-black = "^25.1.0"
-isort = "^6.0.1"
-flake8 = "^7.1.2"
-ipykernel = "^7.0.1"
-
-[tool.black]
+[tool.ruff]
 line-length = 120
-exclude = '''
-(
-  /(
-    \.eggs
-  | \.git
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | _build
-  | buck-out
-  | build
-  | dist
-  | venv
-  )/
-  | /docs/
-  | /examples/
-  | /tests/
-)
-'''
+ 
+[tool.ruff.lint]
+exclude = ["notebooks/**"]
+extend-select = [
+  "UP",  # pyupgrade
+  "D",   # pydocstyle
+]
+select = [
+    "I",
+    "E4", "E7", "E9", "F"
+]
+ignore = [
+    "UP006",
+    "UP035",
+    "D415",
+    "D107",  # Missing docstring in __init__
+    "D205",  # 1 blank line requires between summary line and description
+]
+# Allow fix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+ 
+[tool.ruff.lint.per-file-ignores]
+# Ignore all docstring-related rules (D) in the 'tests' directory
+"tests/**" = ["D"]
+ 
+[tool.ruff.lint.extend-per-file-ignores]
+"__init__.py" = ["D104"]
+ 
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+ 
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"

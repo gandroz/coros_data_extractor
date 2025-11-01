@@ -10,23 +10,10 @@ repos:
     -   id: check-merge-conflict
     -   id: check-added-large-files
         args: ["--maxkb=4000"]
-        exclude: ^poetry.lock$
 
--   repo: https://github.com/psf/black
-    rev: 24.3.0
+-   repo: https://github.com/charliermarsh/ruff-pre-commit
+    rev: v0.20.0
     hooks:
-    -   id: black
+    -   id: ruff
+        args: ["--fix"]
         language_version: python3.12
-
--   repo: https://github.com/pycqa/isort
-    rev: 5.13.2
-    hooks:
-    -   id: isort
-        args: ["--profile", "black"]
-
--   repo: https://github.com/pycqa/flake8
-    rev: 7.0.0
-    hooks:
-    -   id: flake8
-        additional_dependencies: [flake8-docstrings]
-        args: ["--max-line-length=120", "--extend-ignore=E203,D400"]
