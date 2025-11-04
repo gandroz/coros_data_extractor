@@ -7,62 +7,40 @@ import json
 import logging
 import math
 import time
-from enum import Enum
 from pathlib import Path
 
 import requests
 
-from .config import (
-    ACTIVITIES_URL,
-    ACTIVITY_DETAILS_URL,
-    ACTIVITY_DOWNLOAD_URL,
-    ACTIVITY_PAGINATION_LIMIT,
-    DEFAULT_ACTIVITY_LIMIT,
-    LOGIN_URL,
-)
-from .model import (
+from ..model import (
     Frequencies,
     Lap,
     Summary,
     TrainActivities,
     TrainActivity,
 )
+from .api_model import (
+    ActivityFileType,
+    ActivityType,
+    LapType,
+)
+from .constants import (
+    ACTIVITIES_URL,
+    ACTIVITY_DETAILS_URL,
+    ACTIVITY_DOWNLOAD_URL,
+    ACTIVITY_PAGINATION_LIMIT,
+    API_TIMEOUT,
+    DEFAULT_ACTIVITY_LIMIT,
+    LOGIN_URL,
+)
 
 # ruff: noqa: S324
 
-
-API_TIMEOUT = 10
 
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(name)s: %(levelname)s: %(asctime)s %(message)s",
 )
 LOGGER = logging.getLogger(__name__)
-
-
-class ActivityFileType(Enum):
-    CSV = 0
-    GPX = 1
-    KML = 2
-    TCX = 3
-    FIT = 4
-
-
-class ActivityType(Enum):
-    INDOOR_RUN = 101
-    HIKE = 104
-    INDOOR_BIKE = 201
-    SKI_TOURING = 503
-    INDOOR_CLIMB = 800
-    BOULDERING = 801
-    WALK = 900
-    JUMP_ROPE = 901
-    MULTISPORT = 10001
-
-
-class LapType(Enum):
-    BIKE_RIDE = 1
-    RUNNING = 2
 
 
 class CorosDataExtractor:
