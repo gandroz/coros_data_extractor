@@ -1,4 +1,8 @@
-"""Coros data extractor from Training Hub."""
+"""Coros data extractor from Training Hub.
+
+This module contains the core logic associated with downloading data from the Coros API
+and messaging it into data structures representing what the API provided.
+"""
 
 from __future__ import annotations
 
@@ -20,7 +24,6 @@ from ..model import (
 )
 from .api_model import (
     ActivityFileType,
-    ActivityType,
     LapType,
 )
 from .constants import (
@@ -41,6 +44,8 @@ logging.basicConfig(
     format="%(name)s: %(levelname)s: %(asctime)s %(message)s",
 )
 LOGGER = logging.getLogger(__name__)
+MAX_TRIES = 3
+WAIT_BETWEEN_RETRIES = 0.5
 
 
 class CorosDataExtractor:
@@ -53,7 +58,14 @@ class CorosDataExtractor:
         self.user_id = None
 
     def login(self, account: str, password: str) -> None:
-        """Login to Coros API."""
+        """Login to Coros API.
+
+        Args:
+            account: a humanized identifier associated with an account.
+                     This can be an email address or phone number.
+            password: the password for `account`.
+
+        """
         request_data = {
             "account": account,
             "accountType": 2,
@@ -69,8 +81,14 @@ class CorosDataExtractor:
         self,
         file_type: ActivityFileType,
     ) -> None:
-        with requests.Session() as download_session, requests.Session() as query_session:
-            self._export_activities_inner(download_session, query_session, file_type)
+        """Export activities of a specific file type from the Coros API.
+
+        Args:
+            file_type: a file type to export data for, e.g., ActivityFileType.GPX.
+
+        """
+        with requests.Session() as dl_session, requests.Session() as query_session:
+            self._export_activities_inner(dl_session, query_session, file_type)
 
     def _export_activities_inner(
         self,
@@ -78,7 +96,16 @@ class CorosDataExtractor:
         query_session: requests.Session,
         file_type: ...,
     ) -> None:
+        """Export activities of a specific file type from the Coros API (inner).
 
+        Args:
+            download_session: the HTTP session which will be used to download the
+                              exported activities.
+            query_session: the HTTP session which will be used to query for
+                           exported activities.
+            file_type: a file type to export data for, e.g., ActivityFileType.GPX.
+
+        """
         match file_type:
             case ActivityFileType.CSV:
                 extension = "csv"
@@ -109,7 +136,7 @@ class CorosDataExtractor:
                 continue
             else:
                 activity_summary = self.get_summary_data(
-                    activity_data["data"]["summary"]
+                    activity_data["data"]["summary"],
                 )
 
             sport_type = activity["sportType"]
@@ -142,11 +169,9 @@ class CorosDataExtractor:
 
             download_url = resp_json["data"]["fileUrl"]
             resp = download_session.get(download_url, stream=True)
-            filename = "_".join([
-                activity_summary.startTimestamp.isoformat(),
-                activity_summary.name,
-                label_id,
-            ]) + f".{extension}"
+            filename = (
+                f"{activity_summary.startTimestamp.isoformat()}_{activity_summary.name}_{label_id}.{extension}"
+            )
 
             LOGGER.debug(
                 "Downloading file with %d from %s to %s",
@@ -161,7 +186,14 @@ class CorosDataExtractor:
         limit: int | None = DEFAULT_ACTIVITY_LIMIT,
         activity_types: list[int] | None = None,
     ) -> dict:
-        """Extract list of activities from API."""
+        """Extract list of activities from API.
+
+        Args:
+            limit: a maximum number of activities to get in a single query.
+            activity_types: a list of types to get activities for, or `None` to
+                            fetch all activities.
+
+        """
         with requests.Session() as session:
             return self._get_activities_inner(
                 session, limit=limit, activity_types=activity_types,
@@ -173,7 +205,15 @@ class CorosDataExtractor:
         limit: ...,
         activity_types: ...,
     ) -> dict:
-        """Extract list of activities from API (inner)."""
+        """Extract list of activities from API (inner).
+
+        Args:
+            session: HTTP session used to query for activities.
+            limit: a maximum number of activities to get in a single query.
+            activity_types: a list of types to get activities for, or `None` to
+                            fetch all activities.
+
+        """
         if activity_types is None:
             mode_list = ""
         else:
@@ -226,18 +266,41 @@ class CorosDataExtractor:
 
     @staticmethod
     def valid_raw_activity_data(resp_json: dict) -> bool:
+        """Answer whether or not `resp_json` is a valid JSON activity payload.
+
+        Args:
+            resp_json: a JSON blob to interrogate for validity.
+
+        Returns:
+            True if valid; False otherwise.
+
+        """
         return resp_json.get("data", {}).get("summary") is not None
 
     def get_raw_activity_data(
         self,
         session: requests.Session,
         activity: dict,
+        max_tries: int = MAX_TRIES,
+        wait_between_retries: float = WAIT_BETWEEN_RETRIES,
     ) -> dict:
-        """Extract raw data of one activity."""
-        MAX_TRIES = 3
-        WAIT_BETWEEN_RETRIES = 0.5
+        """Extract raw activity data from `activity`.
 
-        for retries_left in range(MAX_TRIES - 1, -1, -1):
+        Args:
+            session: the HTTP session to query activity data from.
+            activity: the JSON blob that denotes an activity to query data for.
+            max_tries: the maximum number of tries to use when downloading the
+                       raw activity data.
+            wait_between_retries: time to sleep between attempts.
+
+        Returns:
+            Raw activity data in `dict` form.
+
+        Raises:
+            RuntimeError: the activity data could not be downloaded.
+
+        """
+        for retries_left in range(max_tries - 1, -1, -1):
             try:
                 resp_json = self._get_raw_activity_data_inner(
                     session, activity,
@@ -255,7 +318,7 @@ class CorosDataExtractor:
 
             if retries_left:
                 LOGGER.warning("Will retry %d more times", retries_left)
-                time.sleep(WAIT_BETWEEN_RETRIES)
+                time.sleep(wait_between_retries)
 
         err_msg = (
             f"REST API call to {ACTIVITY_DETAILS_URL=} failed after {MAX_TRIES} "
@@ -268,6 +331,22 @@ class CorosDataExtractor:
         session: requests.Session,
         activity: ...,
     ) -> dict:
+        """Extract raw activity data from `activity` (inner).
+
+        This method processes a single request.
+
+        Args:
+            session: the HTTP session to query activity data from.
+            activity: the JSON blob that denotes an activity to query data for.
+
+        Returns:
+            A JSON blob representing a potential activity.
+
+        Raises:
+            requests.exceptions.HTTPError: a problem occurred when making/handling
+                                           the request.
+
+        """
         payload = {
             "labelId": activity["labelId"],
             "sportType": activity["sportType"],
@@ -282,8 +361,8 @@ class CorosDataExtractor:
         return resp.json()
 
     @staticmethod
-    def get_activity_data(data) -> Frequencies:
-        """Convert raw activity data to time series."""
+    def get_activity_data(data: dict) -> Frequencies:
+        """Convert raw activity data to a time series representation."""
         freq = Frequencies()
         for item in data:
             freq.cadence.append(item.get("cadence", 0))
@@ -294,32 +373,44 @@ class CorosDataExtractor:
         return freq
 
     @staticmethod
-    def get_summary_data(data) -> Summary:
-        """Convert raw activity summary data to summary model."""
+    def get_summary_data(data: dict) -> Summary:
+        """Convert raw activity summary data to summary model.
+
+        Args:
+            data: a JSON blob which represents a potential activity JSON payload.
+
+        Returns:
+            A summary of the activity.
+
+        """
         return Summary(**data)
 
     @staticmethod
-    def get_laps_data(data) -> list[Lap]:
+    def get_laps_data(data: dict) -> list[Lap]:
         """Convert raw activity to laps data."""
         laps = []
         for item in data:
             if item["type"] == LapType.RUNNING:
                 laps.extend(Lap(**lap) for lap in item["lapItemList"])
+            # XXX: item["type"] == LapType.BIKING:
         return laps
 
     def extract_data(self) -> None:
-        """Extract data from Coros API and build data models accordingly."""
+        """Extract data from Coros API & build data models accordingly."""
         with requests.Session() as session:
             self._extract_data_inner(session)
 
     def _extract_data_inner(self, session: requests.Session) -> None:
+        """Extract data from Coros API & build data models accordingly (inner)."""
         # get all activites
         activities = self.get_activities()
         self.activities = TrainActivities()
         for activity in activities:
             # extract raw data of an activity
             try:
-                activity_data = self.get_raw_activity_data(session=session, activity=activity)
+                activity_data = self.get_raw_activity_data(
+                    session=session, activity=activity,
+                )
             except (requests.RequestException, RuntimeError):
                 LOGGER.exception(
                     "Encountered error when processing activity, %r; continuing...",
@@ -330,7 +421,7 @@ class CorosDataExtractor:
             # build pydantic models
             try:
                 data_wrapped = activity_data["data"]
-                activity = TrainActivity(
+                training_activity = TrainActivity(
                     summary=CorosDataExtractor.get_summary_data(data_wrapped["summary"]),
                     data=CorosDataExtractor.get_activity_data(data_wrapped["frequencyList"]),
                     laps=CorosDataExtractor.get_laps_data(data_wrapped["lapList"]),
@@ -341,10 +432,13 @@ class CorosDataExtractor:
                     data_wrapped,
                 )
             else:
-                self.activities.add_activity(activity)
+                self.activities.add_activity(training_activity)
 
     def to_json(self, filename: str = "activities.json") -> None:
-        """Export data to json file."""
-        if self.activities is not None:
-            with Path(filename).open("w") as f:
-                json.dump(self.activities.model_dump(), f, indent=2)
+        """Export data to a JSON file."""
+        if self.activities is None:
+            LOGGER.debug("No activities have been imported [yet].")
+            return
+
+        with Path(filename).open("w") as f:
+            json.dump(self.activities.model_dump(), f, indent=2)
