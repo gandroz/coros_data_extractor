@@ -3,7 +3,7 @@
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, RootModel, field_serializer, field_validator
+from pydantic import BaseModel, RootModel, field_serializer, field_validator
 
 
 class Summary(BaseModel):
