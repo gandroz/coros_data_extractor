@@ -2,35 +2,31 @@
 SHELL=/bin/bash
 ENV_NAME=coros_data_extractor
 
-.SILENT: install isort black flake8 format lint
+.SILENT: install format lint check
 
 install:
-	pyenv install -s 3.12
-	pyenv local 3.12
-	pip install --upgrade pip
-	pip install poetry
-	poetry install --no-root with dev
-	poetry run ipython kernel install --user --name $(ENV_NAME)
-	poetry run pre-commit install
+	@if ! command -v uv &> /dev/null; then \
+		echo "uv not found. Installing uv..."; \
+		curl -LsSf https://astral.sh/uv/install.sh | sh; \
+		echo "Please restart your shell or run: source ~/.cargo/env"; \
+		echo "Then run 'make install' again."; \
+		exit 1; \
+	fi
+	uv sync --all-extras
+	uv run ipython kernel install --user --name $(ENV_NAME)
+	uv run pre-commit install
 
-isort:
-	$(info Running isort...)
-	$(eval output=$(shell poetry run isort .))
-	@if [ -z "$(output)" ]; then echo "iSort complete."; else echo $(output); fi
+format:
+	$(info Running ruff format...)
+	uv run ruff format .
 	echo ""
 
-black:
-	$(info Running black...)
-	$(eval output=$(shell poetry run black .))
-	@if [ -z "$(output)" ]; then echo "Black formatting complete."; else echo $(output); fi
+lint:
+	$(info Running ruff check...)
+	uv run ruff check . --fix
 	echo ""
 
-flake8:
-	$(info Running flake8...)
-	$(eval output=$(shell poetry run flake8 .))
-	@if [ -z "$(output)" ]; then echo "flake8 linting complete."; else echo $(output); fi
+check:
+	$(info Running ruff check (no fix)...)
+	uv run ruff check .
 	echo ""
-
-format: isort black
-
-lint: flake8

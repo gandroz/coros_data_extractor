@@ -4,6 +4,26 @@ I love my Coros watch and the training hub is very helpful, but I also like data
 
 This simple tool helps you extract some of your data. For example, I've used this tool to extract all my runs with a meaningful title, always the same training, so that I can track my performance over time. I was then able to see the impact of my training on my heart rate, which is very encouraging.
 
+## Installation
+
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management. To install uv:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Then install the project dependencies:
+
+```bash
+make install
+```
+
+Or manually:
+
+```bash
+uv sync --all-extras
+```
+
 ## Usage
 
 ### Data extraction
